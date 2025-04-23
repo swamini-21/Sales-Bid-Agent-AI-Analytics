@@ -226,6 +226,7 @@
 import streamlit as st
 import pickle
 import numpy as np
+import pandas as pd
 import requests
 import google.generativeai as genai 
 # Page configuration
@@ -248,7 +249,21 @@ def load_model():
 model = load_model()
 
 
-
+@st.cache_data  # Cache the data loading
+def load_excel_data():
+    try:
+        # Read the Excel file
+        df = pd.read_excel('merged_data.xlsx')
+        return df
+    except FileNotFoundError:
+        st.error("Excel file not found. Please ensure 'merged_data.xlsx' exists in the project directory.")
+        return None
+    except Exception as e:
+        st.error(f"Error loading Excel file: {str(e)}")
+        return None
+    
+df = load_excel_data()  
+analyzer = (df[['LOI', 'Complete', 'IR', 'CPI', 'Status']]).to_json(orient='records')
 # Input parameters with float validation
 with st.form("bid_inputs"):
     col1, col2, col3, col4 = st.columns(4)
@@ -259,12 +274,12 @@ with st.form("bid_inputs"):
                             value=15.0, step=0.1,
                             format="%.1f")
     with col2:
-        complete = st.number_input("Completion Rate", 
+        complete = st.number_input("Complete", 
                                  min_value=0.0, max_value=3000.0,
                                  value=480.0, step=0.1,
                                  format="%.1f")
     with col3:
-        ir = st.number_input("Interview Rate", 
+        ir = st.number_input("Incident Rate", 
                            min_value=0.0, max_value=100.0,
                            value=36.0, step=0.1,
                            format="%.1f")
@@ -300,9 +315,9 @@ if submitted:
         
         with left:
             st.metric("Win Probability", f"{win_probability*100:.1f}%")
-            st.caption(f"LOI: {loi:.1f} mins")
-            st.caption(f"Completion: {complete:.1f}%")
-            st.caption(f"Interviews: {ir:.1f}/hr")
+            st.caption(f"LOI: {loi:.1f}")
+            st.caption(f"Complete: {complete:.1f}")
+            st.caption(f"Incident Rate: {ir:.1f}")
             st.caption(f"CPI: {cpi:.1f}")
         
         with center:
@@ -351,24 +366,202 @@ if submitted:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
             model = genai.GenerativeModel('gemini-2.0-flash')
         
-            # Create the prompt
-            prompt = f"""As a bid strategy expert, analyze:
-             - Interview Length: {loi:.1f} mins
-            - Project Completion: {complete:.1f}%
-            - Client Meetings: {ir:.1f}/hr
-            - Market CPI: {cpi:.1f}
-            - Win Probability: {win_probability*100:.1f}%
+            # # Create the prompt
+            # # prompt = f"""As a bid strategy expert, analyze:
+            # #  - Interview Length: {loi:.1f} mins
+            # # - Project Completion: {complete:.1f}%
+            # # - Client Meetings: {ir:.1f}/hr
+            # # - Market CPI: {cpi:.1f}
+            # # - Win Probability: {win_probability*100:.1f}%
             
-            IF win probability is higher provide positive encouragement to proceed by ensuring that
-            this metric is 80% confident. If win probability is lower
-            consider all the data and Provide 3-5 bullet points for bid optimization to win"""
-            
+            # # IF win probability is higher provide positive encouragement to proceed by ensuring that
+            # # this metric is 80% confident. If win probability is lower
+            # # consider all the data and Provide 3-5 bullet points for bid optimization to win"""
+
+            # prompt = f"""
+            # You are a bid optimization consultant.
+            # refer and analyze data from  {analyzer} throughly when responding
+            # "You are a bid optimization consultant analyzing these metrics:
+            # Incident Rate: {loi:.1f}  ( range - )
+            # Complete : {complete:.1f}% (Typical competitive threshold - )
+            # CPI: {cpi:.1f} (Current sector benchmark)
+            # Calculated Win Probability: {win_probability*100:.1f}%
+            # Interview
+            # You have access to a data {analyzer} containing historical bid data with features such as LOI (Interview Length), Complete , IR (Incident Rate), and CPI (Cost per Interview), along with the outcome of each bid (Status: 'Invoiced'=Won, 'Lost'=Lost).
+
+            # Metadata - 
+            # Column - A	Project Code Child	ignore
+            # Column - B	Project Code Parent	project # (same as Bid # in the bid data)
+            # Column - C	Project Name	this is what we call the project
+            # Column - G	Invoiced Date	Date when we offically called the project complete
+            # Column - H	Actual Project Revenue 	total project value
+            # Column - J	Client Name	self explanatory
+            # Column - L	Complete	This is the units of things we sell.  So, a project will have 100 completes, for example. 
+            # Column - M	CPI 	Price metric.  This is multiplied by "complete" to get the "Actual Project Revenue"
+            # Column - N	Actual Ir	"Incidence Rate"  This is a MAJOR driver of CPI.
+            # Column - O	Actual Loi	Length of Interview.  Another CPI driver, but less so than CPI
+            # Column - P	Project Tags	you can ignore
+            # Column - Q	Countries	self explanatory
+            # Column - R	Audience	subcategory of the population being studied.  This may play a role in CPI
+
+            # Your task:
+
+            # Statistically analyze the entire df to determine the minimum, maximum, mean, and standard deviation for each feature (LOI, Complete, IR, CPI) for both won and lost bids.
+
+            # For a given new bid (with provided values for LOI, Complete, IR, CPI and predicted win probability), compare each input value to the statistical range of historical data.
+
+            # Identify if any input is an outlier (outside the 5th–95th percentile or more than 1.5 standard deviations from the mean of won bids).
+
+            # Highlight the 3 most significant factors (features) that are limiting win probability, based on deviation from successful (won) bids.
+
+            # Suggest 3 prioritized, actionable recommendations to improve win probability, specifying statistically-derived target ranges for each feature.
+
+            # If win probability is already high (e.g., >80%), provide positive reinforcement but also highlight any metrics that are near historical risk thresholds, with suggestions for monitoring or mitigation.
+
+            # Output format:
+            # ❗ Critical Factors
+            # 🛠️ Recommended Actions
+            # 📈 Expected Outcome
+            # 💡 Business Summary
+
+            # Example Output:
+            # ❗ Critical Factors
+
+            # Interview Length (LOI) is 23 mins, which is above the 95th percentile of won bids (max recommended: 18 mins).
+
+            # Projects completed so far is 40, below the mean for won bids (recommended: >65).
+
+            # CPI is 28, which is higher than the optimal range for win (recommended: 8–18).
+
+            # 🛠️ Recommended Actions
+
+            # Shorten interview length to under 18 mins to align with successful bids.
+
+            # DO MORe PORJECTS OR INCREASE PROJECTS completion number to at least 65% before submitting bid.
+
+            # Re-evaluate pricing strategy to bring CPI into the 8–18 range.
+
+            # 📈 Expected Outcome
+            # Implementing these changes is statistically associated with a 30–45% lift in win probability based on historical patterns.
+
+            # 💡 Business Summary
+            # Your bid is currently outside the optimal range on several key factors. By aligning your metrics with those of previously successful bids, you can significantly increase your chances of winning. Monitor CPI and PROJECTS COMPLETED closely, as these are the strongest predictors of bid success in your historical data.
+            # """
+
+            prompt = f""" You are a bid optimization consultant.
+                Utilize and thoroughly analyze historical bid data from {analyzer} to provide data-driven recommendations.
+
+                Data Reference
+                Project #: Unique project/bid identifier (Column B)
+
+                Project Name: Name of the project (Column C)
+
+                Invoiced Date: Official project completion date (Column G)
+
+                Actual Project Revenue: Total value of the project (Column H)
+
+                Client Name: Name of the client (Column J)
+
+                Complete: Number of completed units delivered (Column L)
+
+                CPI: Cost per Interview (Column M)
+
+                CPI = Price per complete; Actual Project Revenue = CPI × Completes
+
+                Actual IR: Incidence Rate (Column N)
+
+                Major driver of CPI
+
+                Actual LOI: Length of Interview (Column O)
+
+                Secondary driver of CPI
+
+                Countries: Project geography (Column Q)
+
+                Audience: Target sub-population (Column R)
+
+                Ignore all other columns.
+
+                Your Task
+                Statistical Analysis
+
+                For both won and lost bids, calculate minimum, maximum, mean, and standard deviation for:
+
+                LOI (Length of Interview), Complete, IR (Incidence Rate), CPI (Cost per Interview).
+
+                Bid Comparison
+
+                For a new bid (with values for LOI {loi}, Complete {complete}, IR {ir}, CPI {cpi}, and predicted win probability {win_probability}), compare each input to historical ranges.
+
+                Outlier Detection
+
+                Identify if any input is an outlier (outside 5th–95th percentile or >1.5 standard deviations from the mean of won bids).
+
+                Critical Factor Identification
+
+                Highlight the 3 features most limiting win probability, based on deviation from successful bids.
+
+                Actionable Recommendations
+
+                Suggest 3 prioritized, actionable steps to improve win probability, with statistically-derived target ranges.
+
+                High Probability Handling
+
+                If win probability >80%, provide positive reinforcement and flag any metrics near risk thresholds, with monitoring/mitigation suggestions.
+
+                Output Format
+                ❗ Critical Factors
+
+                Briefly list the 3 most significant limiting features, with context (e.g., “LOI is 23, above 95th percentile for wins [max: 18]”).
+
+                🛠️ Recommended Actions
+
+                3 prioritized, actionable steps, each with a target range or value.
+
+                📈 Expected Outcome
+
+                Quantify the potential improvement in win probability, based on historical data.
+
+                💡 Business Summary
+
+                Concise summary of the bid’s position and key next steps to maximize win rate.
+
+                Example Output
+                ❗ Critical Factors
+
+                Interview Length (LOI) is 23, above the 95th percentile for won bids (max recommended: 18).
+
+                Completes are 40, below the mean for won bids (recommended: >65).
+
+                CPI is 28, exceeding the optimal range for wins (recommended: 8–18).
+
+                🛠️ Recommended Actions
+
+                Reduce LOI to under 18 minutes.
+
+                Increase project completes to at least 65 before submitting the bid.
+
+                Adjust pricing to bring CPI into the 8–18 range.
+
+                📈 Expected Outcome
+
+                Implementing these changes is associated with a 30–45% increase in win probability.
+
+                💡 Business Summary
+
+                Your bid currently falls outside optimal ranges on key factors. Aligning with successful bid metrics can significantly boost your win rate. Monitor CPI and completes closely, as they are strong predictors of success.
+
+                Instructions:
+
+                Do not include metrics in column headers—treat all columns as numeric values.
+
+                Base all recommendations and analyses strictly on the data provided."""
             # Generate content
             response = model.generate_content(
                 prompt,
                 generation_config={
                     "temperature": 0.3,
-                    "max_output_tokens": 800
+                    # "max_output_tokens": 800
                 }
             )
             
