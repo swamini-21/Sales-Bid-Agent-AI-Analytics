@@ -331,7 +331,7 @@ if submitted:
                           stroke-width="12" 
                           fill="none"
                           stroke-dasharray="{win_probability*565} 565"/>
-                    <text x="50%" y="45%" font-size="32" text-anchor="middle">
+                    <text x="50%" y="60%" font-size="30" text-anchor="middle">
                         {win_probability*100:.1f}%
                     </text>
                     <defs>
