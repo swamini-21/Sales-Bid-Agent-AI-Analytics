@@ -10,6 +10,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import plotly.graph_objects as go
 # Page configuration
 st.set_page_config(page_title="Predictive Pricing Model", layout="wide")
 st.title("🏆 Bid Analyzer")
@@ -33,7 +34,7 @@ def start_dash():
 
 threading.Thread(target=start_dash, daemon=True).start()
 
-tab_dash, tab_ml  = st.tabs([ "📊 Dashboard", "🧠 ML Model"])
+tab_dash, tab_ml  = st.tabs([ "📊 Insights", "🧠 Predictions"])
 
 with tab_dash:
     st.header("Interactive Dashboard")
@@ -314,55 +315,64 @@ with tab_ml:
             
             # Get probability prediction
             win_probability = model.predict_proba(input_data)[0][1]
-            
-            # Visualization
+        
+        except Exception as e:
+            st.error(f"Prediction error: {str(e)}")
+        else:
             st.subheader("Bid Prediction Analysis")
-            
-            # Create three-column layout
             left, center, right = st.columns([1,2,1])
-            
+
+            with right:
+                if win_probability > 0.7:
+                    st.success("High Confidence 📈")
+                elif win_probability > 0.5:
+                    st.warning("Moderate Confidence ⚖️")
+                else:
+                    st.error("Low Confidence 🚨")
+
             with left:
                 st.metric("Win Probability", f"{win_probability*100:.1f}%")
                 st.caption(f"LOI: {loi:.1f}")
                 st.caption(f"Complete: {complete:.1f}")
                 st.caption(f"Incident Rate: {ir:.1f}")
                 st.caption(f"CPI: {cpi:.1f}")
-            
-            with center:
-                # Probability gauge
-                gauge_html = f"""
-                <div style="text-align:center;">
-                    <svg width="250" height="150">
-                        <circle cx="125" cy="125" r="90" fill="none" stroke="#eee" stroke-width="12"/>
-                        <path d="M35,125 A90,90 0 0,1 215,125" 
-                            stroke="url(#gradient)" 
-                            stroke-width="12" 
-                            fill="none"
-                            stroke-dasharray="{win_probability*565} 565"/>
-                        <text x="50%" y="60%" font-size="30" text-anchor="middle">
-                            {win_probability*100:.1f}%
-                        </text>
-                        <defs>
-                            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                                <stop offset="0%" style="stop-color:#ff4444"/>
-                                <stop offset="100%" style="stop-color:#44ff44"/>
-                            </linearGradient>
-                        </defs>
-                    </svg>
-                </div>
-                """
-                st.markdown(gauge_html, unsafe_allow_html=True)
-                
-                # Recommendation
-                if win_probability >= 0.7:
-                    st.success("## 🚀 Strong Bid Recommendation: Proceed!")
-                elif win_probability >= 0.5:
-                    st.warning("## ⚖️ Competitive Bid: Consider Optimizations")
-                else:
-                    st.error("## 🛑 High Risk: Re-evaluate Bid Strategy")
-            
 
-            # LLM Strategy Insights
+            with center:
+                if win_probability * 100 < 50:
+                    bar_color = "#EF4444"  # Red
+                elif win_probability * 100 < 70:
+                    bar_color = "#FBBF24"  # Yellow
+                else:
+                    bar_color = "#22C55E"
+                fig = go.Figure(go.Indicator(
+                    mode="gauge+number",
+                    value=win_probability * 100,
+                    number={'suffix': "%", 'font': {'size': 56, 'color': '#000000'}},
+                    gauge={
+                        'axis': {'range': [0, 100], 'tickwidth': 0.25, 'tickcolor': "darkgrey"},
+                        'bar': {'color': bar_color, 'thickness': 0.25},
+                        'bgcolor': "lightgrey",
+                        'borderwidth': 2,
+                        'bordercolor': "gray",
+                        # 'steps': [
+                        #     {'range': [0, 50], 'color': '#F87171'},
+                        #     {'range': [50, 70], 'color': '#FBBF24'},
+                        #     {'range': [70, 100], 'color': '#22C55E'}
+                        # ],
+                    },
+                    domain={'x': [0, 1], 'y': [0, 1]}
+                ))
+
+                fig.update_layout(
+                    margin={'t': 0, 'b': 0, 'l': 0, 'r': 0},
+                    height=300,
+                    paper_bgcolor="#FFFFFF",
+                    font={'color': "white", 'family': "Arial"},
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+# 💥 Now safely outside the with blocks:
             st.subheader("AI Recommendations")
             with right:
                 if "GEMINI_API_KEY" not in st.secrets:
@@ -499,8 +509,8 @@ with tab_ml:
             except Exception as e:
                 st.error(f"API Error: {str(e)}")
                     
-        except Exception as e:
-            st.error(f"Prediction error: {str(e)}")
+            except Exception as e:
+                st.error(f"Prediction error: {str(e)}")
 
 # st.markdown("### Full Dash dashboard below:")
 # components.iframe("http://localhost:8050", height=700, scrolling=True)
